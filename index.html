@@ -115,21 +115,16 @@ async function scanSuccess(decodedText) {
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/XXXXXXXXXXXX/exec';
 
     const response = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
+  method: 'POST',
+  body: JSON.stringify({
+    action: 'validateAndDistribute',
+    qrPayload: decodedText,
+    scannedBy: scannerName,
+    scannerMobile: scannerMobile
+  })
+});
 
-      headers: {
-        'Content-Type': 'application/json'
-      },
-
-      body: JSON.stringify({
-        action: 'validateAndDistribute',
-        qrPayload: decodedText,
-        scannedBy: scannerName,
-        scannerMobile: scannerMobile
-      })
-    });
-
-    const data = await response.json();
+const data = await response.json();
 
     if (data.status === 'APPROVED') {
 
