@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Ganpati Food Scanner</title>
+
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+      text-align: center;
+    }
+
+    .card {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+    }
+
+    h2 {
+      margin-top: 0;
+    }
+
+    #reader {
+      width: 100%;
+      margin-top: 20px;
+    }
+
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 10px;
+      font-size: 18px;
+    }
+
+    .ok {
+      background: #e8f5e9;
+      color: #1b5e20;
+    }
+
+    .bad {
+      background: #ffebee;
+      color: #b71c1c;
+    }
+
+    .muted {
+      color: #666;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="card">
+
+  <h2>📷 Food Distribution Scanner</h2>
+
+  <p class="muted">
+    Happy Elegance Vighnaharta Ganpati Mahotsav 2026
+  </p>
+
+  <div id="reader"></div>
+
+  <div id="result"></div>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(window.location.search);
+
+const scannerMobile = params.get('mobile') || '';
+const scannerName = params.get('name') || 'Committee Scanner';
+
+const result = document.getElementById('result');
+
+let qrScanner = null;
+let processing = false;
+
+function showResult(message, type) {
+  result.className = type;
+  result.innerHTML = message;
+}
+
+async function scanSuccess(decodedText) {
+
+  if (processing) return;
+
+  processing = true;
+
+  try {
+
+    if (qrScanner) {
+      await qrScanner.stop().catch(() => {});
+    }
+
+    showResult(
+      '⏳ Validating QR code...',
+      ''
+    );
+
+    /*
+     * The Google Apps Script web-app URL will be inserted here
+     * in the next step.
+     */
+    const APPS_SCRIPT_URL = 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE';
+
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+
+      headers: {
+        'Content-Type': 'application/json'
+      },
+
+      body: JSON.stringify({
+        action: 'validateAndDistribute',
+        qrPayload: decodedText,
+        scannedBy: scannerName,
+        scannerMobile: scannerMobile
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.status === 'APPROVED') {
+
+      showResult(
+        `
+        <h3>✅ DISTRIBUTION APPROVED</h3>
+
+        <p>
+          <b>Flat:</b> ${escapeHtml(data.flatNo)}<br>
+          <b>Name:</b> ${escapeHtml(data.name)}<br>
+          <b>Quantity:</b> ${escapeHtml(data.qty)}
+        </p>
+        `,
+        'ok'
+      );
+
+    } else if (data.status === 'ALREADY_DISTRIBUTED') {
+
+      showResult(
+        `
+        <h3>⚠️ ALREADY DISTRIBUTED</h3>
+        <p>${escapeHtml(data.message)}</p>
+        `,
+        'bad'
+      );
+
+    } else {
+
+      showResult(
+        `
+        <h3>❌ NOT ALLOWED</h3>
+        <p>${escapeHtml(data.message || 'Invalid QR code.')}</p>
+        `,
+        'bad'
+      );
+    }
+
+  } catch (error) {
+
+    showResult(
+      `
+      <h3>❌ ERROR</h3>
+      <p>${escapeHtml(error.message || error)}</p>
+      `,
+      'bad'
+    );
+
+  } finally {
+
+    processing = false;
+
+  }
+}
+
+function escapeHtml(value) {
+
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+}
+
+
+// Start camera scanner
+
+qrScanner = new Html5Qrcode("reader");
+
+qrScanner.start(
+  { facingMode: "environment" },
+  {
+    fps: 10,
+    qrbox: {
+      width: 250,
+      height: 250
+    }
+  },
+  scanSuccess,
+  () => {}
+).catch(error => {
+
+  showResult(
+    `
+    <h3>❌ CAMERA ERROR</h3>
+    <p>
+      Please allow camera permission and reload this page.
+    </p>
+    `,
+    'bad'
+  );
+
+});
+
+</script>
+
+</body>
+</html>
