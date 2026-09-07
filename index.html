@@ -148,13 +148,41 @@ async function scanSuccess(decodedText) {
       !window.opener.closed
     ) {
 
-      window.opener.postMessage(
-        {
-          type: 'FOOD_QR_SCANNED',
-          payload: decodedText
-        },
-        '*'
-      );
+      showResult(
+  `
+  <h3>✅ QR CAPTURED</h3>
+  <p>Please wait...</p>
+  <p style="font-size:11px;word-break:break-all;">
+    ${escapeHtml(decodedText)}
+  </p>
+  `,
+  'ok'
+);
+
+if (
+  window.opener &&
+  !window.opener.closed
+) {
+
+  window.opener.postMessage(
+    {
+      type: 'FOOD_QR_SCANNED',
+      payload: decodedText
+    },
+    '*'
+  );
+
+  setTimeout(() => {
+    window.close();
+  }, 1200);
+
+} else {
+
+  throw new Error(
+    'Please open the scanner from the Ganpati App.'
+  );
+
+}
 
 
       showResult(
