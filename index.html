@@ -90,7 +90,59 @@ function showResult(message, type) {
   result.className = type;
   result.innerHTML = message;
 }
+async function sendScanToAppsScript(payload) {
 
+  return new Promise((resolve, reject) => {
+
+    const callbackName =
+      'ganpatiScanCallback_' + Date.now();
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Scanner request timed out.'));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+
+      const script = document.getElementById(callbackName);
+      if (script) {
+        script.remove();
+      }
+
+      delete window[callbackName];
+    }
+
+    window[callbackName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    const script = document.createElement('script');
+
+    script.id = callbackName;
+
+    const params = new URLSearchParams({
+      action: payload.action,
+      qrPayload: payload.qrPayload,
+      scannedBy: payload.scannedBy,
+      scannerMobile: payload.scannerMobile,
+      callback: callbackName
+    });
+
+    script.src =
+      APPS_SCRIPT_URL +
+      '?' +
+      params.toString();
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('Unable to contact the Apps Script server.'));
+    };
+
+    document.body.appendChild(script);
+  });
+}
 async function scanSuccess(decodedText) {
 
   if (processing) return;
@@ -112,16 +164,13 @@ async function scanSuccess(decodedText) {
      * The Google Apps Script web-app URL will be inserted here
      * in the next step.
      */
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/XXXXXXXXXXXX/exec';
+    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEuKXkmG6x_XQ_ceSI0P3uH1jrBt_Z-xYyiQmkYO32EndRauXZ5ON_CixBXXOk9o7T/exec';
 
-    const response = await fetch(APPS_SCRIPT_URL, {
-  method: 'POST',
-  body: JSON.stringify({
-    action: 'validateAndDistribute',
-    qrPayload: decodedText,
-    scannedBy: scannerName,
-    scannerMobile: scannerMobile
-  })
+    const data = await sendScanToAppsScript({
+  action: 'validateAndDistribute',
+  qrPayload: decodedText,
+  scannedBy: scannerName,
+  scannerMobile: scannerMobile
 });
 
 const data = await response.json();
