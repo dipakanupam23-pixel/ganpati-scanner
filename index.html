@@ -6,7 +6,10 @@
 
   <title>Ganpati Food Scanner</title>
 
-  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script
+    src="https://unpkg.com/html5-qrcode"
+    type="text/javascript">
+  </script>
 
   <style>
     body {
@@ -76,157 +79,27 @@
 
 <script>
 
-const params = new URLSearchParams(window.location.search);
-
-const scannerMobile = params.get('mobile') || '';
-const scannerName = params.get('name') || 'Committee Scanner';
-
 const result = document.getElementById('result');
 
 let qrScanner = null;
 let processing = false;
 
+
+/* ---------------------------------------------------------
+   SHOW RESULT
+--------------------------------------------------------- */
+
 function showResult(message, type) {
-  result.className = type;
+
+  result.className = type || '';
   result.innerHTML = message;
+
 }
-async function sendScanToAppsScript(payload) {
 
-  return new Promise((resolve, reject) => {
 
-    const callbackName =
-      'ganpatiScanCallback_' + Date.now();
-
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Scanner request timed out.'));
-    }, 15000);
-
-    function cleanup() {
-      clearTimeout(timeout);
-
-      const script = document.getElementById(callbackName);
-      if (script) {
-        script.remove();
-      }
-
-      delete window[callbackName];
-    }
-
-    window[callbackName] = function(data) {
-      cleanup();
-      resolve(data);
-    };
-
-    const script = document.createElement('script');
-
-    script.id = callbackName;
-
-    const params = new URLSearchParams({
-      action: payload.action,
-      qrPayload: payload.qrPayload,
-      scannedBy: payload.scannedBy,
-      scannerMobile: payload.scannerMobile,
-      callback: callbackName
-    });
-
-    script.src =
-      APPS_SCRIPT_URL +
-      '?' +
-      params.toString();
-
-    script.onerror = function() {
-      cleanup();
-      reject(new Error('Unable to contact the Apps Script server.'));
-    };
-
-    document.body.appendChild(script);
-  });
-}
-async function scanSuccess(decodedText) {
-
-  if (processing) return;
-
-  processing = true;
-
-  try {
-
-    if (qrScanner) {
-      await qrScanner.stop().catch(() => {});
-    }
-
-    showResult(
-      '⏳ Validating QR code...',
-      ''
-    );
-
-    /*
-     * The Google Apps Script web-app URL will be inserted here
-     * in the next step.
-     */
-    const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEuKXkmG6x_XQ_ceSI0P3uH1jrBt_Z-xYyiQmkYO32EndRauXZ5ON_CixBXXOk9o7T/exec';
-
-    const data = await sendScanToAppsScript({
-  action: 'validateAndDistribute',
-  qrPayload: decodedText,
-  scannedBy: scannerName,
-  scannerMobile: scannerMobile
-});
-
-const data = await response.json();
-
-    if (data.status === 'APPROVED') {
-
-      showResult(
-        `
-        <h3>✅ DISTRIBUTION APPROVED</h3>
-
-        <p>
-          <b>Flat:</b> ${escapeHtml(data.flatNo)}<br>
-          <b>Name:</b> ${escapeHtml(data.name)}<br>
-          <b>Quantity:</b> ${escapeHtml(data.qty)}
-        </p>
-        `,
-        'ok'
-      );
-
-    } else if (data.status === 'ALREADY_DISTRIBUTED') {
-
-      showResult(
-        `
-        <h3>⚠️ ALREADY DISTRIBUTED</h3>
-        <p>${escapeHtml(data.message)}</p>
-        `,
-        'bad'
-      );
-
-    } else {
-
-      showResult(
-        `
-        <h3>❌ NOT ALLOWED</h3>
-        <p>${escapeHtml(data.message || 'Invalid QR code.')}</p>
-        `,
-        'bad'
-      );
-    }
-
-  } catch (error) {
-
-    showResult(
-      `
-      <h3>❌ ERROR</h3>
-      <p>${escapeHtml(error.message || error)}</p>
-      `,
-      'bad'
-    );
-
-  } finally {
-
-    processing = false;
-
-  }
-}
+/* ---------------------------------------------------------
+   ESCAPE HTML
+--------------------------------------------------------- */
 
 function escapeHtml(value) {
 
@@ -240,28 +113,127 @@ function escapeHtml(value) {
 }
 
 
-// Start camera scanner
+/* ---------------------------------------------------------
+   QR SCAN SUCCESS
+--------------------------------------------------------- */
+
+async function scanSuccess(decodedText) {
+
+  if (processing) return;
+
+  processing = true;
+
+  try {
+
+    /* Stop camera */
+    if (qrScanner) {
+      await qrScanner.stop().catch(() => {});
+    }
+
+    showResult(
+      `
+      <h3>✅ QR CAPTURED</h3>
+      <p>Please wait...</p>
+      `,
+      'ok'
+    );
+
+
+    /* -----------------------------------------------------
+       SEND QR DATA BACK TO GANPATI APP
+    ----------------------------------------------------- */
+
+    if (
+      window.opener &&
+      !window.opener.closed
+    ) {
+
+      window.opener.postMessage(
+        {
+          type: 'FOOD_QR_SCANNED',
+          payload: decodedText
+        },
+        '*'
+      );
+
+
+      showResult(
+        `
+        <h3>✅ QR CAPTURED</h3>
+        <p>Returning to Ganpati App...</p>
+        `,
+        'ok'
+      );
+
+
+      /* Close scanner window after sending */
+      setTimeout(() => {
+        window.close();
+      }, 800);
+
+
+    } else {
+
+      throw new Error(
+        'Please open the scanner from the Ganpati App.'
+      );
+
+    }
+
+
+  } catch (error) {
+
+    showResult(
+      `
+      <h3>❌ ERROR</h3>
+      <p>${escapeHtml(error.message || error)}</p>
+      `,
+      'bad'
+    );
+
+    processing = false;
+
+  }
+
+}
+
+
+/* ---------------------------------------------------------
+   START CAMERA
+--------------------------------------------------------- */
 
 qrScanner = new Html5Qrcode("reader");
 
 qrScanner.start(
-  { facingMode: "environment" },
+  {
+    facingMode: "environment"
+  },
   {
     fps: 10,
+
     qrbox: {
       width: 250,
       height: 250
     }
   },
+
   scanSuccess,
+
   () => {}
+
 ).catch(error => {
 
   showResult(
     `
     <h3>❌ CAMERA ERROR</h3>
+
     <p>
-      Please allow camera permission and reload this page.
+      Please allow camera permission
+      and reload this page.
+    </p>
+
+    <p class="muted">
+      ${escapeHtml(error)}
     </p>
     `,
     'bad'
